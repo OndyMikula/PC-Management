@@ -9,4 +9,6 @@ This program can do:
 
 I suggest you to start the program as an administrator so every avaible update can update its version without your knowledge
 
+If you name this program any other name, you must update the name in programs notepad (:exit) for 6. to close the wanted program
+
 - OndyMikula 2025
