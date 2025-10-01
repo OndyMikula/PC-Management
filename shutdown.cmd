@@ -1,36 +1,60 @@
 @echo off
+setlocal enabledelayedexpansion ::pro cyklus v vyber
+
 :menu
 cls
 echo Vyber akci:
-echo 1 - Nastavit cas vypnuti
-echo 2 - Nastavit cas hibernace
-echo 3 - Zrusit naplanovane vypnuti
-echo 4 - Spustit updaty (tady)
-echo 5 - Spustit updaty (v novym okne)
-echo 6 - Zamknout PC
-echo 7 - Exit
-set /p "volba=Zadejte volbu (1-6): "
+echo 0 - Exit
+echo 1 - Nastavit cas
+echo 2 - Zrusit naplanovane vypnuti
+echo 3 - Spustit updaty (tady)
+echo 4 - Spustit updaty (v novym okne)
+echo 5 - Zamknout PC
+echo 6 - Menu
+set /p "volba=Zadejte volbu (0-6): "
 
-if "%volba%"=="1" goto vypnuti
-if "%volba%"=="2" goto hibernace
-if "%volba%"=="3" goto zrusit
-if "%volba%"=="4" goto updaty
-if "%volba%"=="5" goto updaty-newWin
-if "%volba%"=="6" goto lock
-if "%volba%"=="7" goto exit
 
-echo Nezadals číslo v rozmezí ty čůráku vole debílní
+:: Projde kazdy znak ze zadane sekvence
+set i=0
+:loop
+set "char=!volba:~%i%,1!"
+if "!char!"=="" goto menu
+
+if "!char!"=="0" exit
+if "!char!"=="1" call :time
+if "!char!"=="2" call :zrusit
+if "!char!"=="3" call :updaty
+if "!char!"=="4" call :updaty-newWin
+if "!char!"=="5" call :lock
+if "!char!"=="6" goto menu
+
+set /a i+=1
+goto loop
+
+
+
+:time
+cls ::clear screen
+set /p "cas=Zadej cas v minutach: "
+echo.
+echo Pro planovani vypnuti zvol 4: 
+set /p "shutdown=Pro planovani hibernace zvol 5: "
+
+if "%shutdown%"=="4" goto :vypnuti
+if "%shutdown%"=="5" goto :hibernace
+
+echo Zvolils spatne cislo, zkus to znova
 pause
-goto menu
+goto :eof ::end of file, hodi zpatky tam od kama jsi prisel
 
 
 
 :vypnuti
 cls
-set /p "cas=Za jak dlouho se ma PC vypnout (v minutach): "
-set /a sekundy=cas*60
-set /a hodiny=cas / 60
-set /a minuty=cas %% 60
+echo Zvolil sis Vypnuti
+set /a sekundy=%cas% * 60 ::pro command
+set /a hodiny=%cas% / 60 ::oboje pro echo
+set /a minuty=%cas% %% 60
 
 shutdown -s -t %sekundy%
 echo.
@@ -40,27 +64,30 @@ echo.
 
 echo Pro exit zadej 4: 
 set /p "exit=Pro zamknuti PC zadej 5: "
-if "%exit%"=="4" goto exit
-if "%exit%"=="5" goto lock
-goto menu
+
+if "%exit%"=="4" exit
+if "%exit%"=="5" call lock
+goto :eof
 
 
 
 :hibernace
 cls
-set /p "cas=Za jak dlouho ma PC hibernovat (v minutach): "
+echo Zvolil sis Hibernaci
 set /a sekundy=cas*60
 set /a hodiny=cas / 60
 set /a minuty=cas %% 60
 
 echo.
 echo Hibernace naplanovana za %hodiny%h %minuty%m
-set /p "lock=Jestli chceš před spuštěním časovače zamknout PC, zadej 5: "
-if %"lock"%=="5" rundll32.exe user32.dll,LockWorkStation
 
-timeout /t %sekundy% /nobreak
-shutdown /h
-exit
+::set /p "lock=Jestli chces pred spustenim casovace zamknout PC, zadej 5: "
+::if "!char!"=="5" call :lock
+::if "%lock%"=="5" rundll32.exe user32.dll,LockWorkStation
+
+start cmd /c "timeout /t %sekundy% /nobreak & shutdown /h"
+::shutdown /h
+goto :eof
 
 
 
@@ -70,30 +97,23 @@ shutdown -a
 echo.
 echo Naplanovane vypnuti/hibernace bylo zruseno.
 pause
-goto menu
+goto :eof
 
 
 
 :updaty
 winget upgrade --all --include-unknown --accept-source-agreements --accept-package-agreements --silent
 pause
-goto menu
+goto :eof
 
 
 
 :updaty-newWin
 start cmd /c "winget upgrade --all --include-unknown --accept-source-agreements --accept-package-agreements --silent & pause"
-goto menu
-
+goto :eof
 
 
 
 :lock
-rundll32.exe user32.dll,LockWorkStation
-goto menu
-
-
-
-:exit
-taskkill/im shutdown.cmd
-exit
+rundll32.exe user32.dll,LockWorkStation ::zamknuti PC
+goto :eof
