@@ -10,8 +10,9 @@ echo 2 - Zrusit naplanovane vypnuti
 echo 3 - Spustit updaty (tady)
 echo 4 - Spustit updaty (v novym okne)
 echo 5 - Zamknout PC
-echo 6 - Menu
-set /p "volba=Zadejte volbu (0-6): "
+echo 6 - Nastavit delay
+echo 7 - Menu
+set /p "volba=Zadejte volbu (0-7): "
 
 
 :: Projde kazdy znak ze zadane sekvence
@@ -26,7 +27,8 @@ if "!char!"=="2" call :zrusit
 if "!char!"=="3" call :updaty
 if "!char!"=="4" call :updaty-newWin
 if "!char!"=="5" call :lock
-if "!char!"=="6" goto menu
+if "!char!"=="6" call :delay
+if "!char!"=="7" goto menu
 
 set /a i+=1
 goto loop
@@ -34,59 +36,62 @@ goto loop
 
 
 :time
-cls ::clear screen
+cls
 set /p "cas=Zadej cas v minutach: "
+if "!cas!"=="x" goto menu
+
 echo.
-echo Pro planovani vypnuti zvol 4: 
-set /p "shutdown=Pro planovani hibernace zvol 5: "
+echo Vyber akci pro tento cas:
+echo 4 - Vypnuti
+echo 5 - Hibernace
+echo x - Zrusit a jit zpet
+set /p "akce=Tvoje volba: "
 
-if "%shutdown%"=="4" goto :vypnuti
-if "%shutdown%"=="5" goto :hibernace
+if "!akce!"=="4" goto :vypnuti
+if "!akce!"=="5" goto :hibernace
+if "!akce!"=="x" goto menu
 
-echo Zvolils spatne cislo, zkus to znova
+echo Spatna volba, zkus to znova.
 pause
-goto :eof ::end of file, hodi zpatky tam od kama jsi prisel
-
+goto :time
 
 
 :vypnuti
 cls
-echo Zvolil sis Vypnuti
-set /a sekundy=%cas% * 60 ::pro command
-set /a hodiny=%cas% / 60 ::oboje pro echo
+set /a sekundy=%cas% * 60
+set /a hodiny=%cas% / 60
 set /a minuty=%cas% %% 60
+echo CHYSTAS SE: Vypnout PC za %hodiny%h %minuty%m.
+set /p "confirm=Je to spravne? (1/0): "
+if /i not "!confirm!"=="1" goto menu
 
 shutdown -s -t %sekundy%
 echo.
-echo Vypnuti naplanovano za %hodiny%h %minuty%m
-echo.
+goto :eof
 
 
-echo Pro exit zadej 4: 
-set /p "exit=Pro zamknuti PC zadej 5: "
+::echo Pro exit zadej 4: 
+::set /p "exit=Pro zamknuti PC zadej 5: "
 
-if "%exit%"=="4" exit
-if "%exit%"=="5" call lock
+::if "%exit%"=="4" exit
+::if "%exit%"=="5" call lock
 goto :eof
 
 
 
 :hibernace
 cls
-echo Zvolil sis Hibernaci
-set /a sekundy=cas*60
-set /a hodiny=cas / 60
-set /a minuty=cas %% 60
-
+set /a sekundy=%cas% * 60
+set /a hodiny=%cas% / 60
+set /a minuty=%cas% %% 60
+echo CHYSTAS SE: Hibernovat PC za %hodiny%h %minuty%m.
+echo (Pozor: Hibernaci zrusis zavrenim toho noveho okna s odpocitem!)
 echo.
-echo Hibernace naplanovana za %hodiny%h %minuty%m
+set /p "confirm=Je to spravne? (1/0): "
+if /i not "!confirm!"=="1" goto menu
 
-::set /p "lock=Jestli chces pred spustenim casovace zamknout PC, zadej 5: "
-::if "!char!"=="5" call :lock
-::if "%lock%"=="5" rundll32.exe user32.dll,LockWorkStation
-
-start cmd /c "timeout /t %sekundy% /nobreak & shutdown /h"
-::shutdown /h
+:: Spoustime v novem okne s titulkem, aby se to dalo poznat
+start "HIBERNACE_ODPOCET" cmd /c "echo PC bude hibernovan za %cas% minut. Pro zruseni zavri tohle okno! & timeout /t %sekundy% /nobreak & shutdown /h"
 goto :eof
 
 
@@ -95,13 +100,18 @@ goto :eof
 cls
 shutdown -a
 echo.
-echo Naplanovane vypnuti/hibernace bylo zruseno.
+echo Naplanovane vypnuti bylo zruseno.
+echo Pokud mas spusteny odpocet na hibernaci, musis zavrit to druhe cerne okno!
 pause
 goto :eof
 
 
 
 :updaty
+
+:: Tento řádek zajistí, že se okno automaticky připne navrch obrazovky:
+powershell -Command "$s='[DllImport(\"user32.dll\")]public static extern IntPtr GetForegroundWindow();[DllImport(\"user32.dll\")]public static extern bool SetWindowPos(IntPtr h,IntPtr a,int x,int y,int cx,int cy,uint f);';$t=Add-Type -MemberDefinition $s -Name 'W' -PassThru;$h=$t::GetForegroundWindow();$t::SetWindowPos($h,-1,0,0,0,0,3)"
+
 winget upgrade --all --include-unknown --accept-source-agreements --accept-package-agreements --silent
 pause
 goto :eof
@@ -109,6 +119,10 @@ goto :eof
 
 
 :updaty-newWin
+
+:: Tento řádek zajistí, že se okno automaticky připne navrch obrazovky (PiP):
+powershell -Command "$s='[DllImport(\"user32.dll\")]public static extern IntPtr GetForegroundWindow();[DllImport(\"user32.dll\")]public static extern bool SetWindowPos(IntPtr h,IntPtr a,int x,int y,int cx,int cy,uint f);';$t=Add-Type -MemberDefinition $s -Name 'W' -PassThru;$h=$t::GetForegroundWindow();$t::SetWindowPos($h,-1,0,0,0,0,3)"
+
 start cmd /c "winget upgrade --all --include-unknown --accept-source-agreements --accept-package-agreements --silent & pause"
 goto :eof
 
@@ -116,4 +130,15 @@ goto :eof
 
 :lock
 rundll32.exe user32.dll,LockWorkStation ::zamknuti PC
+goto :eof
+
+
+
+:delay
+cls
+set /p "delay_cas=Zadej delay v minutach: "
+set /a delay_sekundy=!delay_cas! * 60
+echo.
+echo Cekam !delay_cas! minut
+timeout /t !delay_sekundy! /nobreak
 goto :eof
