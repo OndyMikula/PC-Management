@@ -1,21 +1,22 @@
 @echo off
-setlocal enabledelayedexpansion ::pro cyklus v vyber
+setlocal enabledelayedexpansion
 
 :menu
 cls
-echo Vyber akci:
+echo =========================================
+echo             PC Management
+echo =========================================
 echo 0 - Exit
-echo 1 - Nastavit cas
+echo 1 - Nastavit cas (Vypnuti/Hibernace)
 echo 2 - Zrusit naplanovane vypnuti
 echo 3 - Spustit updaty (tady)
 echo 4 - Spustit updaty (v novym okne)
 echo 5 - Zamknout PC
-echo 6 - Nastavit delay
-echo 7 - Menu
+echo 6 - Menu
+echo 7 - Pridat delay
+echo =========================================
 set /p "volba=Zadejte volbu (0-7): "
 
-
-:: Projde kazdy znak ze zadane sekvence
 set i=0
 :loop
 set "char=!volba:~%i%,1!"
@@ -27,17 +28,15 @@ if "!char!"=="2" call :zrusit
 if "!char!"=="3" call :updaty
 if "!char!"=="4" call :updaty-newWin
 if "!char!"=="5" call :lock
-if "!char!"=="6" call :delay
-if "!char!"=="7" goto menu
+if "!char!"=="6" goto menu
+if "!char!"=="7" call :delay
 
 set /a i+=1
 goto loop
 
-
-
 :time
 cls
-set /p "cas=Zadej cas v minutach: "
+set /p "cas=Zadej cas v minutach (nebo 'x' pro zpet): "
 if "!cas!"=="x" goto menu
 
 echo.
@@ -47,98 +46,89 @@ echo 5 - Hibernace
 echo x - Zrusit a jit zpet
 set /p "akce=Tvoje volba: "
 
+if "!akce!"=="x" goto menu
 if "!akce!"=="4" goto :vypnuti
 if "!akce!"=="5" goto :hibernace
-if "!akce!"=="x" goto menu
 
 echo Spatna volba, zkus to znova.
 pause
 goto :time
 
-
 :vypnuti
 cls
+:: Kontrola pro okamzite vypnuti
+if "!cas!"=="0" (
+    echo CHYSTAS SE: Vypnout PC HNED TED!
+    set /p "confirm=Je to spravne? (j/n): "
+    if /i not "!confirm!"=="j" goto menu
+    shutdown -s -t 0
+    goto :eof
+)
+
 set /a sekundy=%cas% * 60
 set /a hodiny=%cas% / 60
 set /a minuty=%cas% %% 60
 echo CHYSTAS SE: Vypnout PC za %hodiny%h %minuty%m.
-set /p "confirm=Je to spravne? (1/0): "
-if /i not "!confirm!"=="1" goto menu
+set /p "confirm=Je to spravne? (j/n): "
+if /i not "!confirm!"=="j" goto menu
 
 shutdown -s -t %sekundy%
 echo.
+echo Vypnuti naplanovano. (Zrusit ho muzes volbou 2 v menu)
+pause
 goto :eof
-
-
-::echo Pro exit zadej 4: 
-::set /p "exit=Pro zamknuti PC zadej 5: "
-
-::if "%exit%"=="4" exit
-::if "%exit%"=="5" call lock
-goto :eof
-
-
 
 :hibernace
 cls
+:: Kontrola pro okamzitou hibernaci
+if "!cas!"=="0" (
+    echo CHYSTAS SE: Hibernovat PC HNED TED!
+    set /p "confirm=Je to spravne? (j/n): "
+    if /i not "!confirm!"=="j" goto menu
+    shutdown /h
+    goto :eof
+)
+
 set /a sekundy=%cas% * 60
 set /a hodiny=%cas% / 60
 set /a minuty=%cas% %% 60
 echo CHYSTAS SE: Hibernovat PC za %hodiny%h %minuty%m.
 echo (Pozor: Hibernaci zrusis zavrenim toho noveho okna s odpocitem!)
 echo.
-set /p "confirm=Je to spravne? (1/0): "
-if /i not "!confirm!"=="1" goto menu
+set /p "confirm=Je to spravne? (j/n): "
+if /i not "!confirm!"=="j" goto menu
 
 :: Spoustime v novem okne s titulkem, aby se to dalo poznat
 start "HIBERNACE_ODPOCET" cmd /c "echo PC bude hibernovan za %cas% minut. Pro zruseni zavri tohle okno! & timeout /t %sekundy% /nobreak & shutdown /h"
 goto :eof
 
-
-
 :zrusit
 cls
 shutdown -a
 echo.
-echo Naplanovane vypnuti bylo zruseno.
+echo Prikaz 'shutdown -a' byl odeslan (zastavi klasicke vypnuti).
 echo Pokud mas spusteny odpocet na hibernaci, musis zavrit to druhe cerne okno!
 pause
 goto :eof
 
-
-
 :updaty
-
-:: Tento řádek zajistí, že se okno automaticky připne navrch obrazovky:
-powershell -Command "$s='[DllImport(\"user32.dll\")]public static extern IntPtr GetForegroundWindow();[DllImport(\"user32.dll\")]public static extern bool SetWindowPos(IntPtr h,IntPtr a,int x,int y,int cx,int cy,uint f);';$t=Add-Type -MemberDefinition $s -Name 'W' -PassThru;$h=$t::GetForegroundWindow();$t::SetWindowPos($h,-1,0,0,0,0,3)"
-
 winget upgrade --all --include-unknown --accept-source-agreements --accept-package-agreements --silent
 pause
 goto :eof
 
-
-
 :updaty-newWin
-
-:: Tento řádek zajistí, že se okno automaticky připne navrch obrazovky (PiP):
-powershell -Command "$s='[DllImport(\"user32.dll\")]public static extern IntPtr GetForegroundWindow();[DllImport(\"user32.dll\")]public static extern bool SetWindowPos(IntPtr h,IntPtr a,int x,int y,int cx,int cy,uint f);';$t=Add-Type -MemberDefinition $s -Name 'W' -PassThru;$h=$t::GetForegroundWindow();$t::SetWindowPos($h,-1,0,0,0,0,3)"
-
-start cmd /c "winget upgrade --all --include-unknown --accept-source-agreements --accept-package-agreements --silent & pause"
+start "UPDATY" cmd /c "winget upgrade --all --include-unknown --accept-source-agreements --accept-package-agreements --silent & pause"
 goto :eof
-
-
 
 :lock
-rundll32.exe user32.dll,LockWorkStation ::zamknuti PC
+rundll32.exe user32.dll,LockWorkStation
 goto :eof
-
-
 
 :delay
 cls
 set /p "delay_cas=Zadej delay v minutach: "
 set /a delay_sekundy=!delay_cas! * 60
 echo.
-echo Cekam !delay_cas! minut
+echo Cekam !delay_cas! minut(y) nez spustim dalsi prikaz...
 timeout /t !delay_sekundy! /nobreak
 goto :eof
