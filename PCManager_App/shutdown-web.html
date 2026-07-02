@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PC Management UI</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --text-color: #ffffff;
+            --btn-bg: #1e1e1e;
+            --btn-border: 2px solid #00f3ff;
+            --btn-shadow: 0 0 10px #00f3ff;
+            --btn-hover-bg: #2a2a2a;
+            --run-btn-bg: #00ff66;
+            --run-btn-text: #000000;
+            --console-bg: #000000;
+            --console-text: #00ff00;
+            --modal-bg: rgba(30, 30, 30, 0.95);
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --link-color: #00f3ff;
+        }
+
+        [data-theme="classic"] {
+            --bg-color: #fdf6e3;
+            --text-color: #333333;
+            --btn-bg: #eee8d5;
+            --btn-border: 2px solid #8a6d3b;
+            --btn-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+            --btn-hover-bg: #e2d9c3;
+            --run-btn-bg: #8a6d3b;
+            --run-btn-text: #ffffff;
+            --console-bg: #ffffff;
+            --console-text: #333333;
+            --modal-bg: rgba(238, 232, 213, 0.95);
+            --font-family: 'Georgia', serif;
+            --link-color: #8a6d3b;
+        }
+
+        [data-theme="cyberpunk"] {
+            --bg-color: #0d0221;
+            --text-color: #00ff41;
+            --btn-bg: #261447;
+            --btn-border: 2px solid #ff007f;
+            --btn-shadow: 0 0 15px #ff007f, inset 0 0 10px #ff007f;
+            --btn-hover-bg: #3a1c71;
+            --run-btn-bg: #ffff00;
+            --run-btn-text: #000000;
+            --console-bg: #000000;
+            --console-text: #ff007f;
+            --modal-bg: rgba(38, 20, 71, 0.95);
+            --font-family: 'Courier New', Courier, monospace;
+            --link-color: #ff007f;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-family);
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            transition: background-color 0.5s, color 0.5s;
+        }
+
+        header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 80px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 0 40px;
+            box-sizing: border-box;
+            background-color: var(--bg-color);
+            z-index: 1000;
+            transition: background-color 0.5s;
+        }
+
+        h1 {
+            margin: 0;
+            text-shadow: var(--btn-shadow);
+            font-size: 28px;
+        }
+
+        .controls {
+            position: absolute;
+            right: 40px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .flag {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            transition: transform 0.2s;
+            user-select: none;
+        }
+
+        .flag svg {
+            border-radius: 4px;
+            box-shadow: 0 0 6px rgba(0,0,0,0.4);
+        }
+
+        .flag:hover {
+            transform: scale(1.15);
+        }
+
+        #settings-icon {
+            font-size: 28px;
+            cursor: pointer;
+            transition: transform 0.3s;
+            user-select: none;
+        }
+
+        #settings-icon:hover {
+            transform: rotate(90deg);
+        }
+
+        #main-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 110px;
+            transition: filter 0.3s, transform 0.5s, opacity 0.5s;
+            flex: 1;
+        }
+
+        .blurred {
+            filter: blur(10px);
+            pointer-events: none;
+        }
+
+        .checkbox-container {
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: var(--font-family);
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .checkbox-container input {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .btn-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 450px;
+        }
+
+        .action-btn {
+            background-color: var(--btn-bg);
+            color: var(--text-color);
+            border: var(--btn-border);
+            border-radius: 12px;
+            padding: 15px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: var(--btn-shadow);
+            transition: transform 0.2s, background-color 0.2s;
+            position: relative;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: var(--font-family);
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        .action-btn:hover {
+            transform: scale(1.03);
+            background-color: var(--btn-hover-bg);
+        }
+
+        .badge {
+            background-color: var(--text-color);
+            color: var(--bg-color);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .action-btn.selected .badge {
+            display: flex;
+        }
+
+        #run-btn {
+            background-color: var(--run-btn-bg);
+            color: var(--run-btn-text);
+            border: 2px solid var(--run-btn-text);
+            border-radius: 12px;
+            padding: 18px;
+            font-size: 18px;
+            font-weight: bold;
+            margin-top: 25px;
+            cursor: pointer;
+            width: 450px;
+            transition: transform 0.2s, opacity 0.3s;
+            display: none;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        #run-btn:hover {
+            transform: scale(1.05);
+        }
+
+        #console-area {
+            margin-top: 50px;
+            width: 80%;
+            max-width: 800px;
+            margin-bottom: 30px;
+        }
+
+        .console-block {
+            background-color: var(--console-bg);
+            color: var(--console-text);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--text-color);
+            font-family: monospace;
+            white-space: pre-wrap;
+            height: 150px;
+            overflow-y: auto;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        .console-block::-webkit-scrollbar { width: 8px; }
+        .console-block::-webkit-scrollbar-track { background: var(--console-bg); }
+        .console-block::-webkit-scrollbar-thumb { background: var(--text-color); border-radius: 4px; }
+
+        #settings-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.8);
+            background-color: var(--modal-bg);
+            padding: 40px;
+            border-radius: 20px;
+            border: var(--btn-border);
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+            display: none;
+            flex-direction: row;
+            gap: 20px;
+            z-index: 1001;
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+
+        #settings-modal.active {
+            display: flex;
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .theme-btn {
+            width: 100px;
+            height: 100px;
+            border-radius: 12px;
+            cursor: pointer;
+            border: 2px solid white;
+            transition: transform 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .theme-btn:hover { transform: scale(1.1); }
+        #theme-dark { background: #121212; color: #00f3ff; box-shadow: 0 0 10px #00f3ff; }
+        #theme-classic { background: #fdf6e3; color: #333; border-color: #8a6d3b; }
+        #theme-cyberpunk { background: #0d0221; color: #ff007f; box-shadow: 0 0 15px #ff007f; border-color: #ff007f;}
+
+        #input-page {
+            position: fixed;
+            top: 0;
+            left: 100vw;
+            width: 100vw;
+            height: 100vh;
+            background-color: var(--bg-color);
+            z-index: 950;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: left 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        #input-page.active { left: 0; }
+
+        .input-box {
+            background-color: var(--btn-bg);
+            color: var(--text-color);
+            border: var(--btn-border);
+            border-radius: 12px;
+            padding: 15px;
+            font-size: 24px;
+            text-align: center;
+            width: 250px;
+            margin-bottom: 20px;
+            outline: none;
+            box-shadow: var(--btn-shadow);
+        }
+
+        #input-action-select {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .radio-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 18px;
+            cursor: pointer;
+        }
+
+        .radio-label input { width: 18px; height: 18px; }
+
+        .input-controls {
+            display: flex;
+            gap: 20px;
+        }
+
+        .input-btn {
+            background-color: var(--btn-bg);
+            color: var(--text-color);
+            border: var(--btn-border);
+            border-radius: 12px;
+            padding: 12px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: var(--btn-shadow);
+            transition: transform 0.2s;
+        }
+
+        .input-btn:hover { transform: scale(1.05); }
+
+        .expand-anim {
+            position: fixed;
+            background-color: var(--btn-bg);
+            z-index: 900;
+            transition: all 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+            pointer-events: none;
+        }
+
+        footer {
+            margin-top: auto;
+            padding: 20px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: var(--text-color);
+        }
+
+        footer a {
+            color: var(--link-color);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: bold;
+            transition: opacity 0.2s;
+        }
+
+        footer a:hover { opacity: 0.7; }
+        
+        .app-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            background: rgba(0, 0, 0, 0.4); /* Lehce odlišené pozadí patičky */
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            font-size: 14px;
+            width: 100%;
+            box-sizing: border-box;
+            margin-top: auto; /* Zaručí posun dolů, pokud je wrapper display: flex */
+            
+            /* Odkomentuj následující řádky, pokud chceš mít footer fixně nalepený úplně dole: */
+            /* position: absolute; */
+            /* bottom: 0; */
+            /* left: 0; */
+        }
+
+        .footer-left, .footer-center, .footer-right {
+            flex: 1; /* Zajistí, že se prostor rovnoměrně rozdělí do 3 částí */
+        }
+
+        .footer-left{
+            text-align: left;
+            color: #00ffcc;
+        }
+
+        .footer-center {
+            text-align: center;
+            opacity: 0.6;
+        }
+
+        .footer-right {
+            text-align: right;
+            font-weight: bold;
+            color: #00ffcc; /* Neónová barva verze, změň podle tvé palety */
+        }
+
+        .github-link {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #00ffcc;
+            text-decoration: none;
+            opacity: 1;
+            transition: opacity 0.3s ease, color 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1 id="title-text">PC Management</h1>
+        <div class="controls">
+            <div id="settings-icon">⚙️</div>
+            
+            <div class="flag" onclick="setLang('cz')"> <!--svg cz vlajka-->
+                <svg width="36" height="24" viewBox="0 0 60 40">
+                    <path fill="#fff" d="M0 0h60v20H0z"/>
+                    <path fill="#D7141A" d="M0 20h60v20H0z"/>
+                    <path fill="#11457E" d="M0 0l30 20L0 40z"/>
+                </svg>
+            </div> 
+
+            <div class="flag" onclick="setLang('en')"> <!--svg aj vlajky-->
+                <svg width="48" height="24" viewBox="0 0 60 30">
+                    <path d="M0 0h60v30H0z" fill="#00247D"/>
+                    <path d="M0 0l60 30m0-30L0 30" stroke="#fff" stroke-width="6"/>
+                    <path d="M0 0l60 30m0-30L0 30" stroke="#CF142B" stroke-width="4"/>
+                    <path d="M30 0v30M0 15h60" stroke="#fff" stroke-width="10"/>
+                    <path d="M30 0v30M0 15h60" stroke="#CF142B" stroke-width="6"/>
+                </svg>
+            </div>
+        </div>
+    </header>
+
+    <div id="settings-modal"> <!--themes-->
+        <div class="theme-btn" id="theme-dark" onclick="setTheme('dark-neon')">Dark<br>Neon</div>
+        <div class="theme-btn" id="theme-classic" onclick="setTheme('classic')">Classic</div>
+        <div class="theme-btn" id="theme-cyberpunk" onclick="setTheme('cyberpunk')">Cyberpunk</div>
+    </div>
+
+    <!--Zacatek buttons frontend-->
+    <div id="input-page">
+        <h1 id="input-page-title">Set Time</h1>
+        <input type="text" id="custom-number-input" class="input-box" placeholder="0" inputmode="numeric" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+        
+        <!--Vypuntí/Hibernace-->
+        <div id="input-action-select">
+            <label class="radio-label"><input type="radio" name="sub-action" value="4" checked> <span class="t-shutdown-opt">Vypnutí</span></label>
+            <label class="radio-label"><input type="radio" name="sub-action" value="5"> <span class="t-hib-opt">Hibernace</span></label>
+            
+            <div id="hibernate-warning" style="color: red; display: none; margin-top: 10px;">
+                Pro možnost hibernace je potřeba tuto možnost zapnout v Ovládacích panelech (Control Panels).
+            </div>
+        </div>
+
+        <!--Ok - Zpět-->
+        <div class="input-controls">
+            <button class="input-btn" id="input-page-back"><span class="t-back">Zpět</span></button>
+            <button class="input-btn" id="input-page-submit">OK</button>
+        </div>
+    </div>
+
+    <!--Možnosti-->
+    <div id="main-container">
+        <label class="checkbox-container">
+            <input type="checkbox" id="multi-select-mode">
+            <span id="t-checkbox-label">Zaškrtnout více možností</span>
+        </label>
+        
+        <div class="btn-grid">
+            <button class="action-btn" data-id="0"><span>0 - <span class="t-exit">Exit</span></span><span class="badge"></span></button>
+            <button class="action-btn" data-id="1"><span>1 - <span class="t-time">Nastavit čas (Vypnutí/Hibernace)</span></span><span class="badge"></span></button>
+            <button class="action-btn" data-id="2"><span>2 - <span class="t-cancel">Zrušit naplánované vypnutí</span></span><span class="badge"></span></button>
+            <button class="action-btn" data-id="3"><span>3 - <span class="t-up-here">Spustit updaty</span></span><span class="badge"></span></button>
+            <button class="action-btn" data-id="4"><span>4 - <span class="t-up-new">Spustit updaty (jako administrator)</span></span><span class="badge"></span></button>
+            <button class="action-btn" data-id="5"><span>5 - <span class="t-lock">Zamknout PC</span></span><span class="badge"></span></button>
+            <button class="action-btn" data-id="6"><span>6 - <span class="t-delay">Přidat delay</span></span><span class="badge"></span></button>
+        </div>
+
+        <button id="run-btn">SPUSTIT</button>
+
+        <div id="console-area">
+            <div class="console-block" id="console-output">```Čekám na akci...```</div>
+        </div>
+    </div>
+    <!--konec buttons frontend-->
+
+    <footer class="app-footer" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding: 12px 20px; background: rgba(0, 0, 0, 0.4); border-top: 1px solid rgba(255, 255, 255, 0.1); color: #ffffff; font-size: 14px; width: 100%; box-sizing: border-box; margin-top: auto;">
+        <div class="footer-left" style="flex: 1; text-align: left;">
+            <a href="https://github.com/OndyMikula/PC-Management" target="_blank" class="github-link" style="display: inline-flex; align-items: center; gap: 8px; color: #00ffcc;">
+                <svg width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+                </svg>
+                GitHub
+            </a>
+        </div>
+        <div class="footer-center" style="flex: 1; text-align: center; opacity: 0.6;">
+            Ondy Mikula 2026
+        </div>
+        <div class="footer-right" style="flex: 1; text-align: right;">
+            PC Manager 2.0
+        </div>
+    </footer>
+
+    <script>
+        const translations = {
+            cz: {
+                time: "Nastavení času (na vypnutí či hibernaci)",
+                cancel: "Zrušit plánované vypnutí",
+                upHere: "Spustit updaty",
+                upNew: "Spustit updaty (jako administrátor)",
+                lock: "Zamknout PC",
+                delay: "Přidat delay",
+                exit: "Exit aplikace",
+                checkbox: "Zaškrtnout více možností",
+                runBtn: "SPUSTIT",
+                waiting: "Čekám na akci...",
+                shutdownOpt: "Vypnutí",
+                hibOpt: "Hibernace",
+                titleTime: "Zadej čas v minutách:",
+                titleDelay: "Zadej delay v minutách:",
+                adminReq: "Zadej tento kód do cmd s admin právy:",
+                chainTitle: "=== BATCH EXECUTION CHAIN ===",
+                chainStep: "Krok",
+                logCancel: "Odesílám příkaz pro zrušení vypnutí.",
+                logUpHere: "Spouštím update balíčků v aktuálním kontextu.",
+                logUpNew: "Spouštím update balíčků s administrátorskými právy.",
+                logLock: "Zamykám PC.",
+                logExit: "Odesílám signál pro ukončení aplikace.",
+                back: "Zpět"
+            },
+            en: {
+                time: "Set Time (Shutdown/Hibernate)",
+                cancel: "Cancel Scheduled Shutdown",
+                upHere: "Run Updates",
+                upNew: "Run Updates (As Administrator)",
+                lock: "Lock PC",
+                delay: "Add Delay",
+                exit: "Exit Application",
+                checkbox: "Check multiple options",
+                runBtn: "RUN",
+                waiting: "Waiting for action...",
+                shutdownOpt: "Shutdown",
+                hibOpt: "Hibernate",
+                titleTime: "Enter time in minutes:",
+                titleDelay: "Enter delay in minutes:",
+                adminReq: "Enter this code into CMD with admin rights:",
+                chainTitle: "=== BATCH EXECUTION CHAIN ===",
+                chainStep: "Step",
+                logCancel: "Sending cancel shutdown command.",
+                logUpHere: "Running package updates.",
+                logUpNew: "Running package updates with administrator privileges.",
+                logLock: "Locking PC.",
+                logExit: "Sending application exit signal.",
+                back: "Back"
+            }
+        };
+
+        let currentLang = localStorage.getItem('pc_lang') || 'cz';
+        let currentTheme = localStorage.getItem('pc_theme') || 'dark-neon';
+        let queue = []; 
+        let consoleHistory = []; 
+
+        function executeInSystem(command) {
+            if (window.chrome && window.chrome.webview) {
+                // Pošleme příkaz do C# backendu
+                window.chrome.webview.postMessage(command);
+            } else {
+                console.log("Fiktivní spuštění mimo aplikaci: " + command);
+            }
+        }
+
+        // Inicializace při načtení
+        document.body.setAttribute('data-theme', currentTheme);
+        window.addEventListener('DOMContentLoaded', () => {
+            setLang(currentLang);
+        });
+
+        function setLang(lang) {
+            currentLang = lang;
+            localStorage.setItem('pc_lang', lang);
+            const t = translations[lang];
+            
+            // Bezpečná aktualizace textů (ověří, zda element existuje)
+            const els = {
+                '.t-time': t.time,
+                '.t-cancel': t.cancel,
+                '.t-up-here': t.upHere,
+                '.t-up-new': t.upNew,
+                '.t-lock': t.lock,
+                '.t-delay': t.delay,
+                '.t-exit': t.exit,
+                '#t-checkbox-label': t.checkbox,
+                '#run-btn': t.runBtn,
+                '.t-shutdown-opt': t.shutdownOpt,
+                '.t-hib-opt': t.hibOpt,
+                '.t-back': t.back
+            };
+
+            for (const [selector, text] of Object.entries(els)) {
+                const el = document.querySelector(selector) || document.getElementById(selector.replace('#', ''));
+                if (el) el.innerText = text;
+            }
+            
+            renderConsole();
+        }
+
+        const settingsIcon = document.getElementById('settings-icon');
+        const settingsModal = document.getElementById('settings-modal');
+        const mainContainer = document.getElementById('main-container');
+
+        settingsIcon.addEventListener('click', () => {
+            if (settingsModal.classList.contains('active')) {
+                settingsModal.classList.remove('active');
+                mainContainer.classList.remove('blurred');
+            } else {
+                settingsModal.classList.add('active');
+                mainContainer.classList.add('blurred');
+            }
+        });
+
+        function setTheme(themeName) {
+            currentTheme = themeName;
+            localStorage.setItem('pc_theme', themeName);
+            document.body.setAttribute('data-theme', themeName);
+            settingsModal.classList.remove('active');
+            mainContainer.classList.remove('blurred');
+        }
+
+        const multiSelectMode = document.getElementById('multi-select-mode');
+        const runBtn = document.getElementById('run-btn');
+
+        multiSelectMode.addEventListener('change', function() {
+            queue = [];
+            updateBadges();
+            if(this.checked) {
+                runBtn.style.display = 'block';
+            } else {
+                runBtn.style.display = 'none';
+            }
+        });
+
+        const customNumberInput = document.getElementById('custom-number-input');
+        customNumberInput.addEventListener('keypress', function(e) {
+            if (!/[0-9]/.test(e.key)) e.preventDefault();
+        });
+
+        document.querySelectorAll('.action-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const id = this.getAttribute('data-id');
+
+                if (multiSelectMode.checked) {
+                    handleMultiSelection(id);
+                } else {
+                    const rect = this.getBoundingClientRect();
+                    const animDiv = document.createElement('div');
+                    animDiv.className = 'expand-anim';
+                    animDiv.style.top = rect.top + 'px';
+                    animDiv.style.left = rect.left + 'px';
+                    animDiv.style.width = rect.width + 'px';
+                    animDiv.style.height = rect.height + 'px';
+                    animDiv.style.borderRadius = '12px';
+                    document.body.appendChild(animDiv);
+
+                    requestAnimationFrame(() => {
+                        animDiv.style.top = '0';
+                        animDiv.style.left = '0';
+                        animDiv.style.width = '100vw';
+                        animDiv.style.height = '100vh';
+                        animDiv.style.borderRadius = '0';
+                        animDiv.style.opacity = '0';
+                    });
+                    setTimeout(() => { animDiv.remove(); }, 500);
+
+                    handleSingleAction(id);
+                }
+            });
+        });
+
+        function askForInput(title, showOptions) {
+            return new Promise((resolve) => {
+                document.getElementById('input-page-title').innerText = title;
+                customNumberInput.value = '';
+                document.getElementById('input-action-select').style.display = showOptions ? 'flex' : 'none';
+                document.getElementById('input-page').classList.add('active');
+                
+                const submitBtn = document.getElementById('input-page-submit');
+                const backBtn = document.getElementById('input-page-back');
+                
+                const newSubmitBtn = submitBtn.cloneNode(true);
+                submitBtn.parentNode.replaceChild(newSubmitBtn, submitBtn);
+                
+                const newBackBtn = backBtn.cloneNode(true);
+                backBtn.parentNode.replaceChild(newBackBtn, backBtn);
+
+                newSubmitBtn.addEventListener('click', () => {
+                    const val = customNumberInput.value || "0";
+                    let selectedOpt = null;
+                    if (showOptions) {
+                        const checkedRadio = document.querySelector('input[name="sub-action"]:checked');
+                        selectedOpt = checkedRadio ? checkedRadio.value : '4';
+                    }
+                    document.getElementById('input-page').classList.remove('active');
+                    resolve({ val: val, opt: selectedOpt });
+                });
+
+                newBackBtn.addEventListener('click', () => {
+                    document.getElementById('input-page').classList.remove('active');
+                    resolve(null); 
+                });
+            });
+        }
+
+        async function handleSingleAction(id) {
+            const t = translations[currentLang];
+            if (id === '1') {
+                const res = await askForInput(t.titleTime, true);
+                if (res) logAction({ type: 'single', actionId: id, params: { cas: res.val, akce: res.opt } });
+            } else if (id === '6') {
+                const res = await askForInput(t.titleDelay, false);
+                if (res) logAction({ type: 'single', actionId: id, params: { delay: res.val } });
+            } else {
+                logAction({ type: 'single', actionId: id, params: null });
+            }
+        }
+
+        function handleMultiSelection(id) {
+            const existingIndex = queue.findIndex(item => item.id === id);
+            if (existingIndex > -1) {
+                queue.splice(existingIndex, 1);
+            } else {
+                queue.push({ id: id, params: null }); 
+            }
+            updateBadges();
+        }
+
+        function updateBadges() {
+            document.querySelectorAll('.action-btn').forEach(btn => {
+                const id = btn.getAttribute('data-id');
+                const idx = queue.findIndex(item => item.id === id);
+                const badge = btn.querySelector('.badge');
+                if (badge) {
+                    if (idx > -1) {
+                        btn.classList.add('selected');
+                        badge.innerText = idx + 1;
+                    } else {
+                        btn.classList.remove('selected');
+                        badge.innerText = '';
+                    }
+                }
+            });
+        }
+
+        runBtn.addEventListener('click', async () => {
+            if (queue.length === 0) return;
+            
+            const t = translations[currentLang];
+            let finalQueue = []; 
+
+            for (let i = 0; i < queue.length; i++) {
+                const item = queue[i];
+                
+                if (item.id === '1') {
+                    const res = await askForInput(t.titleTime, true);
+                    if (!res) return; 
+                    finalQueue.push({ id: item.id, params: { cas: res.val, akce: res.opt } });
+                } 
+                else if (item.id === '6') {
+                    const res = await askForInput(t.titleDelay, false);
+                    if (!res) return; 
+                    finalQueue.push({ id: item.id, params: { delay: res.val } });
+                } 
+                else {
+                    finalQueue.push({ id: item.id, params: null });
+                }
+            }
+
+            logAction({ type: 'chain', items: finalQueue });
+            
+            queue = [];
+            updateBadges();
+            multiSelectMode.checked = false;
+            runBtn.style.display = 'none';
+        });
+
+        function logAction(logObj) {
+            // 1. Zapsání do historie a vykreslení v UI
+            consoleHistory.push(logObj);
+            renderConsole();
+            
+            // 2. REÁLNÉ SPUŠTĚNÍ PŘÍKAZU VE WINDOWS
+            if (logObj.type === 'single') {
+                let cmd = getActionString(currentLang, logObj.actionId, logObj.params);
+                executeInSystem(cmd.code);
+                
+            } else if (logObj.type === 'chain') {
+                let hasExit = false;
+                let cmds = [];
+                
+                // Vyfiltrujeme Exit (id 0) mimo klasické CMD příkazy
+                logObj.items.forEach(item => {
+                    if (item.id === '0') {
+                        hasExit = true;
+                    } else {
+                        cmds.push(getActionString(currentLang, item.id, item.params).code);
+                    }
+                });
+                
+                let chainCode = cmds.join(" & ");
+                
+                // Pokud zbyly nějaké CMD příkazy, pošleme je první
+                if (chainCode.trim() !== "") {
+                    executeInSystem(chainCode);
+                }
+                
+                // Pokud byl v řetězci Exit, pošleme signál backendu samostatně s malým zpožděním
+                if (hasExit) {
+                    setTimeout(() => { 
+                        executeInSystem("EXIT_APP"); 
+                    }, 500); 
+                    // Zpoždění 500ms zajistí, že se C# appka nevypne dřív, než stihne odeslat CMD příkazy
+                }
+            }
+        }
+
+        function getActionString(lang, id, params) {
+            const t = translations[lang];
+            let label = "", code = "", admin = false;
+            
+            // Mapování podle tvého zadaného pořadí
+            switch(id) {
+                case '1': // 1. Nastavení času (na vypnutí či hibernaci)
+                    let sec = parseInt(params.cas) * 60;
+                    if (params.akce === '4') {
+                        label = lang === 'cz' ? `Naplánováno vypnutí za ${params.cas} min.` : `Shutdown scheduled in ${params.cas} min.`;
+                        code = `shutdown -s -t ${sec}`;
+                    } else {
+                        label = lang === 'cz' ? `Naplánována hibernace za ${params.cas} min.` : `Hibernate scheduled in ${params.cas} min.`;
+                        code = `start "HIBERNACE" cmd /c "timeout /t ${sec} /nobreak & shutdown /h"`;
+                    }
+                    break;
+                case '2': // 2. Zrušit plánované vypnutí
+                    label = t.logCancel; code = "shutdown -a"; break;
+                case '3': // 3. Spustit updaty
+                    label = t.logUpHere; code = `start "UPDATY" cmd /c "winget upgrade --all --include-unknown --accept-source-agreements --accept-package-agreements --silent & pause"`; break;
+                case '4': // 4. Spustit updaty (jako administrátor)
+                    label = t.logUpNew; code = "powershell -WindowStyle Hidden -Command \"Start-Process cmd -ArgumentList '/c winget upgrade --all --include-unknown --accept-source-agreements --accept-package-agreements --silent & pause' -Verb RunAs\""; admin = true; break;
+                case '5': // 5. Zamknout PC
+                    label = t.logLock; code = "rundll32.exe user32.dll,LockWorkStation"; break;
+                case '6': // 6. Přidat delay
+                    let dSec = parseInt(params.delay) * 60;
+                    label = lang === 'cz' ? `Přidávám delay ${params.delay} min.` : `Adding delay ${params.delay} min.`;
+                    code = `timeout /t ${dSec} /nobreak`; break;
+                case '0': // 0. Exit aplikace
+                    label = t.logExit; code = "EXIT_APP"; break; // Posílá signál "EXIT_APP" do tvého C#
+            }
+            return { label, code, admin };
+        }
+
+        function renderConsole() {
+            const outDiv = document.getElementById('console-output');
+            const t = translations[currentLang];
+            let fullText = "```\n";
+            
+            if (consoleHistory.length === 0) {
+                fullText += t.waiting + "\n";
+            } else {
+                consoleHistory.forEach((log, index) => {
+                    if (index > 0) fullText += "\n-----------------------------------------\n";
+                    
+                    if (log.type === 'single') {
+                        let cmd = getActionString(currentLang, log.actionId, log.params);
+                        fullText += cmd.label + "\n";
+                        if (cmd.admin) fullText += "[!] " + t.adminReq + "\n";
+                        fullText += "> " + cmd.code + "\n";
+                    } 
+                    else if (log.type === 'chain') {
+                        fullText += t.chainTitle + "\n";
+                        let chainCode = "";
+                        let reqAdmin = false;
+                        
+                        log.items.forEach((item, i) => {
+                            let cmd = getActionString(currentLang, item.id, item.params);
+                            fullText += `[${t.chainStep} ${i + 1}] ${cmd.label}\n`;
+                            chainCode += cmd.code + "\n";
+                            if (cmd.admin) reqAdmin = true;
+                        });
+                        
+                        if (reqAdmin) fullText += "\n[!] " + t.adminReq + "\n";
+                        fullText += "\n> " + chainCode.trim().replace(/\n/g, "\n> ") + "\n";
+                    }
+                });
+            }
+
+            function checkHibernate(isEnabled) {
+                let hibernateOption = document.getElementById('prop-hibernate'); // ID tvé položky/buttonu pro hibernaci
+                let warningText = document.getElementById('hibernate-warning');
+
+                if (!isEnabled) {
+                    if (hibernateOption) hibernateOption.style.display = 'none'; // Skryje možnost hibernace
+                    if (warningText) warningText.style.display = 'block';        // Ukáže červený text
+                }
+            }
+            
+            fullText += "```";
+            outDiv.innerText = fullText;
+            outDiv.scrollTop = outDiv.scrollHeight;
+        }
+    </script>
+</body>
+</html>

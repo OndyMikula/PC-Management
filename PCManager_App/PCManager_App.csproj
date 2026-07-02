@@ -1,0 +1,41 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<UseWPF>true</UseWPF>
+		
+		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+		<SelfContained>true</SelfContained>
+		<PublishSingleFile>true</PublishSingleFile>
+
+		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+
+		<DebugType>none</DebugType>
+		<DebugSymbols>false</DebugSymbols>
+		<ApplicationIcon>PCManager_App.ico</ApplicationIcon>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <None Remove="PCManager_App.ico" />
+	  <None Remove="shutdown-web.html" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Content Include="PCManager_App.ico" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4022.49" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <EmbeddedResource Include="shutdown-web.html" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Resource Include="PCManager_App.ico" />
+	</ItemGroup>
+
+</Project>
