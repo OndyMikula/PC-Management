@@ -1,19 +1,18 @@
 # PC-Management
-Menu options:
+PCManager_App.exe is a portable app, everything it needs is in the .exe file
+<br>
+**no need for installation**
 
-0. Exit program
-1. Set time (in how many minutes wil the PC shutdown or go to hibernation - you can choose which one do you want) - (you must have turned on the hibernation option in Windows for it to use)
-2. Cancel set timing
-3. Update your programs in the same cmd window
-4. Update your programs in new cmd window
-5. Lock your PC
-6. Set delay
-7. Menu
+You can combine the options by input in menu 
+<br>(f.e. 150 - You will set the time and choose if you want shutdown or hibermation --> Locks your PC --> Exits program)
+<br>(you need to have hibernation option turned on in Control Panels for full funcionality)
 
-I suggest you to start the program as an administrator so every avaible update can update its version without your knowledge
+Program has Czech and English UI
+It offers 3 themes - Dark mode, Light 'Classic' mode and Cyberpunk
 
-You can combine the options by input in menu (f.e. 150 - You will set the time and choose if you want shutdown or hibermation --> Locks your PC --> Exits program)
+Console is generating what command will the program send to cmd
 
-**Program is in Czech, if you want another language, you have to use translator**
+Preview: <br>
+<img width="786" height="1032" alt="image" src="https://github.com/user-attachments/assets/61c50d6d-d416-4c8b-a955-327a0614d5cd" />
 
-- OndyMikula 2026
+- PCManager_App 2.0 | OndyMikula 2026
