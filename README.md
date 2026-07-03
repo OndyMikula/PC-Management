@@ -1,4 +1,14 @@
 # PC-Management
+
+### 2.1
+Added update dialog when opening application
+Any countdown now shows in integrated console
+
+### Fixes:
+App is seperated from Webview2 processess in Task Manager
+App icon is showing right after downloading (no need to start)
+Set delay now isn't being skipped
+
 PCManager_App.exe is a portable app, everything it needs is in the .exe file
 <br>
 **no need for installation**
