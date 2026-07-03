@@ -558,7 +558,7 @@
                 adminReq: "Zadej tento kód do cmd s admin právy:",
                 chainTitle: "=== BATCH EXECUTION CHAIN ===",
                 chainStep: "Krok",
-                logCancel: "Odesílám příkaz pro zrušení vypnutí.",
+                logCancel: "Odesílám příkaz pro zrušení vypnutí a hibernace.",
                 logUpHere: "Spouštím update balíčků v aktuálním kontextu.",
                 logUpNew: "Spouštím update balíčků s administrátorskými právy.",
                 logLock: "Zamykám PC.",
@@ -597,16 +597,6 @@
         let queue = []; 
         let consoleHistory = []; 
 
-        function executeInSystem(command) {
-            if (window.chrome && window.chrome.webview) {
-                // Pošleme příkaz do C# backendu
-                window.chrome.webview.postMessage(command);
-            } else {
-                console.log("Fiktivní spuštění mimo aplikaci: " + command);
-            }
-        }
-
-        // Inicializace při načtení
         document.body.setAttribute('data-theme', currentTheme);
         window.addEventListener('DOMContentLoaded', () => {
             setLang(currentLang);
@@ -617,27 +607,17 @@
             localStorage.setItem('pc_lang', lang);
             const t = translations[lang];
             
-            // Bezpečná aktualizace textů (ověří, zda element existuje)
             const els = {
-                '.t-time': t.time,
-                '.t-cancel': t.cancel,
-                '.t-up-here': t.upHere,
-                '.t-up-new': t.upNew,
-                '.t-lock': t.lock,
-                '.t-delay': t.delay,
-                '.t-exit': t.exit,
-                '#t-checkbox-label': t.checkbox,
-                '#run-btn': t.runBtn,
-                '.t-shutdown-opt': t.shutdownOpt,
-                '.t-hib-opt': t.hibOpt,
-                '.t-back': t.back
+                '.t-time': t.time, '.t-cancel': t.cancel, '.t-up-here': t.upHere,
+                '.t-up-new': t.upNew, '.t-lock': t.lock, '.t-delay': t.delay,
+                '.t-exit': t.exit, '#t-checkbox-label': t.checkbox, '#run-btn': t.runBtn,
+                '.t-shutdown-opt': t.shutdownOpt, '.t-hib-opt': t.hibOpt, '.t-back': t.back
             };
 
             for (const [selector, text] of Object.entries(els)) {
                 const el = document.querySelector(selector) || document.getElementById(selector.replace('#', ''));
                 if (el) el.innerText = text;
             }
-            
             renderConsole();
         }
 
@@ -646,13 +626,8 @@
         const mainContainer = document.getElementById('main-container');
 
         settingsIcon.addEventListener('click', () => {
-            if (settingsModal.classList.contains('active')) {
-                settingsModal.classList.remove('active');
-                mainContainer.classList.remove('blurred');
-            } else {
-                settingsModal.classList.add('active');
-                mainContainer.classList.add('blurred');
-            }
+            settingsModal.classList.toggle('active');
+            mainContainer.classList.toggle('blurred');
         });
 
         function setTheme(themeName) {
@@ -669,11 +644,7 @@
         multiSelectMode.addEventListener('change', function() {
             queue = [];
             updateBadges();
-            if(this.checked) {
-                runBtn.style.display = 'block';
-            } else {
-                runBtn.style.display = 'none';
-            }
+            runBtn.style.display = this.checked ? 'block' : 'none';
         });
 
         const customNumberInput = document.getElementById('custom-number-input');
@@ -691,22 +662,13 @@
                     const rect = this.getBoundingClientRect();
                     const animDiv = document.createElement('div');
                     animDiv.className = 'expand-anim';
-                    animDiv.style.top = rect.top + 'px';
-                    animDiv.style.left = rect.left + 'px';
-                    animDiv.style.width = rect.width + 'px';
-                    animDiv.style.height = rect.height + 'px';
-                    animDiv.style.borderRadius = '12px';
+                    animDiv.style.cssText = `top:${rect.top}px; left:${rect.left}px; width:${rect.width}px; height:${rect.height}px; border-radius:12px;`;
                     document.body.appendChild(animDiv);
 
                     requestAnimationFrame(() => {
-                        animDiv.style.top = '0';
-                        animDiv.style.left = '0';
-                        animDiv.style.width = '100vw';
-                        animDiv.style.height = '100vh';
-                        animDiv.style.borderRadius = '0';
-                        animDiv.style.opacity = '0';
+                        animDiv.style.cssText = `top:0; left:0; width:100vw; height:100vh; border-radius:0; opacity:0; transition: all 0.4s ease;`;
                     });
-                    setTimeout(() => { animDiv.remove(); }, 500);
+                    setTimeout(() => { animDiv.remove(); }, 400);
 
                     handleSingleAction(id);
                 }
@@ -725,7 +687,6 @@
                 
                 const newSubmitBtn = submitBtn.cloneNode(true);
                 submitBtn.parentNode.replaceChild(newSubmitBtn, submitBtn);
-                
                 const newBackBtn = backBtn.cloneNode(true);
                 backBtn.parentNode.replaceChild(newBackBtn, backBtn);
 
@@ -789,13 +750,11 @@
 
         runBtn.addEventListener('click', async () => {
             if (queue.length === 0) return;
-            
             const t = translations[currentLang];
             let finalQueue = []; 
 
             for (let i = 0; i < queue.length; i++) {
                 const item = queue[i];
-                
                 if (item.id === '1') {
                     const res = await askForInput(t.titleTime, true);
                     if (!res) return; 
@@ -812,50 +771,21 @@
             }
 
             logAction({ type: 'chain', items: finalQueue });
-            
             queue = [];
             updateBadges();
             multiSelectMode.checked = false;
             runBtn.style.display = 'none';
         });
 
+        // OPRAVA: Data posíláme do C# jako strukturovaný JSON
         function logAction(logObj) {
-            // 1. Zapsání do historie a vykreslení v UI
             consoleHistory.push(logObj);
             renderConsole();
             
-            // 2. REÁLNÉ SPUŠTĚNÍ PŘÍKAZU VE WINDOWS
-            if (logObj.type === 'single') {
-                let cmd = getActionString(currentLang, logObj.actionId, logObj.params);
-                executeInSystem(cmd.code);
-                
-            } else if (logObj.type === 'chain') {
-                let hasExit = false;
-                let cmds = [];
-                
-                // Vyfiltrujeme Exit (id 0) mimo klasické CMD příkazy
-                logObj.items.forEach(item => {
-                    if (item.id === '0') {
-                        hasExit = true;
-                    } else {
-                        cmds.push(getActionString(currentLang, item.id, item.params).code);
-                    }
-                });
-                
-                let chainCode = cmds.join(" & ");
-                
-                // Pokud zbyly nějaké CMD příkazy, pošleme je první
-                if (chainCode.trim() !== "") {
-                    executeInSystem(chainCode);
-                }
-                
-                // Pokud byl v řetězci Exit, pošleme signál backendu samostatně s malým zpožděním
-                if (hasExit) {
-                    setTimeout(() => { 
-                        executeInSystem("EXIT_APP"); 
-                    }, 500); 
-                    // Zpoždění 500ms zajistí, že se C# appka nevypne dřív, než stihne odeslat CMD příkazy
-                }
+            if (window.chrome && window.chrome.webview) {
+                window.chrome.webview.postMessage(JSON.stringify(logObj));
+            } else {
+                console.log("Mimo aplikaci:", logObj);
             }
         }
 
@@ -863,32 +793,25 @@
             const t = translations[lang];
             let label = "", code = "", admin = false;
             
-            // Mapování podle tvého zadaného pořadí
             switch(id) {
-                case '1': // 1. Nastavení času (na vypnutí či hibernaci)
+                case '1': 
                     let sec = parseInt(params.cas) * 60;
                     if (params.akce === '4') {
                         label = lang === 'cz' ? `Naplánováno vypnutí za ${params.cas} min.` : `Shutdown scheduled in ${params.cas} min.`;
                         code = `shutdown -s -t ${sec}`;
                     } else {
                         label = lang === 'cz' ? `Naplánována hibernace za ${params.cas} min.` : `Hibernate scheduled in ${params.cas} min.`;
-                        code = `start "HIBERNACE" cmd /c "timeout /t ${sec} /nobreak & shutdown /h"`;
+                        code = `C# Background Timer -> shutdown /h`;
                     }
                     break;
-                case '2': // 2. Zrušit plánované vypnutí
-                    label = t.logCancel; code = "shutdown -a"; break;
-                case '3': // 3. Spustit updaty
-                    label = t.logUpHere; code = `start "UPDATY" cmd /c "winget upgrade --all --include-unknown --accept-source-agreements --accept-package-agreements --silent & pause"`; break;
-                case '4': // 4. Spustit updaty (jako administrátor)
-                    label = t.logUpNew; code = "powershell -WindowStyle Hidden -Command \"Start-Process cmd -ArgumentList '/c winget upgrade --all --include-unknown --accept-source-agreements --accept-package-agreements --silent & pause' -Verb RunAs\""; admin = true; break;
-                case '5': // 5. Zamknout PC
-                    label = t.logLock; code = "rundll32.exe user32.dll,LockWorkStation"; break;
-                case '6': // 6. Přidat delay
-                    let dSec = parseInt(params.delay) * 60;
+                case '2': label = t.logCancel; code = "shutdown -a & C# Cancel"; break;
+                case '3': label = t.logUpHere; code = `winget upgrade --all ...`; break;
+                case '4': label = t.logUpNew; code = `winget upgrade --all (Admin)`; admin = true; break;
+                case '5': label = t.logLock; code = "LockWorkStation"; break;
+                case '6': 
                     label = lang === 'cz' ? `Přidávám delay ${params.delay} min.` : `Adding delay ${params.delay} min.`;
-                    code = `timeout /t ${dSec} /nobreak`; break;
-                case '0': // 0. Exit aplikace
-                    label = t.logExit; code = "EXIT_APP"; break; // Posílá signál "EXIT_APP" do tvého C#
+                    code = `C# Async Wait (${params.delay}m)`; break;
+                case '0': label = t.logExit; code = "EXIT_APP"; break; 
             }
             return { label, code, admin };
         }
@@ -903,7 +826,6 @@
             } else {
                 consoleHistory.forEach((log, index) => {
                     if (index > 0) fullText += "\n-----------------------------------------\n";
-                    
                     if (log.type === 'single') {
                         let cmd = getActionString(currentLang, log.actionId, log.params);
                         fullText += cmd.label + "\n";
@@ -914,33 +836,41 @@
                         fullText += t.chainTitle + "\n";
                         let chainCode = "";
                         let reqAdmin = false;
-                        
                         log.items.forEach((item, i) => {
                             let cmd = getActionString(currentLang, item.id, item.params);
                             fullText += `[${t.chainStep} ${i + 1}] ${cmd.label}\n`;
                             chainCode += cmd.code + "\n";
                             if (cmd.admin) reqAdmin = true;
                         });
-                        
                         if (reqAdmin) fullText += "\n[!] " + t.adminReq + "\n";
                         fullText += "\n> " + chainCode.trim().replace(/\n/g, "\n> ") + "\n";
                     }
                 });
             }
-
-            function checkHibernate(isEnabled) {
-                let hibernateOption = document.getElementById('prop-hibernate'); // ID tvé položky/buttonu pro hibernaci
-                let warningText = document.getElementById('hibernate-warning');
-
-                if (!isEnabled) {
-                    if (hibernateOption) hibernateOption.style.display = 'none'; // Skryje možnost hibernace
-                    if (warningText) warningText.style.display = 'block';        // Ukáže červený text
-                }
-            }
-            
             fullText += "```";
             outDiv.innerText = fullText;
             outDiv.scrollTop = outDiv.scrollHeight;
+        }
+
+        // FUNKCE VOLANÁ PŘÍMO Z C# PRO KONTROLU HIBERNACE
+        function checkHibernate(isEnabled) {
+            let hibernateRadio = document.querySelector('input[name="sub-action"][value="5"]');
+            let hibernateLabel = hibernateRadio ? hibernateRadio.closest('.radio-label') : null;
+            let warningText = document.getElementById('hibernate-warning');
+
+            if (!isEnabled) {
+                if (hibernateLabel) hibernateLabel.style.display = 'none'; 
+                if (warningText) {
+                    warningText.style.display = 'block';
+                    warningText.innerText = "Jestliže chcete zvolit mode Hibernace, povolte Hibernaci v Ovládacích panelech.";
+                }
+                if (hibernateRadio && hibernateRadio.checked) {
+                    document.querySelector('input[name="sub-action"][value="4"]').checked = true;
+                }
+            } else {
+                if (hibernateLabel) hibernateLabel.style.display = 'inline-flex';
+                if (warningText) warningText.style.display = 'none';
+            }
         }
     </script>
 </body>

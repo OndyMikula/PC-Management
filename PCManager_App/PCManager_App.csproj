@@ -15,15 +15,11 @@
 		<DebugType>none</DebugType>
 		<DebugSymbols>false</DebugSymbols>
 		<ApplicationIcon>PCManager_App.ico</ApplicationIcon>
+		<AssemblyName>PC Manager App</AssemblyName>
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <None Remove="PCManager_App.ico" />
 	  <None Remove="shutdown-web.html" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <Content Include="PCManager_App.ico" />
 	</ItemGroup>
 
 	<ItemGroup>
