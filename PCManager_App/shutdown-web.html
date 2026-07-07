@@ -324,12 +324,6 @@
             box-shadow: var(--btn-shadow);
         }
 
-        #input-action-select {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
         .radio-label {
             display: flex;
             align-items: center;
@@ -339,6 +333,34 @@
         }
 
         .radio-label input { width: 18px; height: 18px; }
+
+        /* Kontejner pro výběr akcí (Vypnutí / Hibernace) */
+        #input-action-select {
+            display: flex;
+            flex-direction: column;   /* Seřadí položky (volby a pak varování) pod sebe */
+            align-items: center;       /* Vycentruje je horizontálně na střed */
+            justify-content: center;   /* Vycentruje je vertikálně */
+            gap: 15px;                 /* Mezera mezi volbou a textem */
+            width: 100%;
+            margin: 20px 0;
+        }
+
+        /* Pokud chceš mít rádio tlačítka vedle sebe, zabal je do společného divu */
+        .radio-options-wrapper {
+            display: flex;
+            justify-content: center;
+            gap: 20px;                 /* Mezera mezi Vypnutím a Hibernací, pokud jsou obě povolené */
+        }
+
+        /* Stylování červeného varovného textu */
+        #hibernate-warning {
+            color: #ff4a4a;            /* Výrazná neonovější červená, která sedí do tmavého režimu */
+            font-size: 0.9rem;
+            text-align: center;
+            max-width: 80%;            /* Aby se text na malých obrazovkách hezky zalomil */
+            line-height: 1.4;
+            font-weight: 500;
+        }
 
         .input-controls {
             display: flex;
@@ -439,6 +461,27 @@
             opacity: 1;
             transition: opacity 0.3s ease, color 0.3s ease;
         }
+
+        #toast-notification {
+            position: fixed;
+            bottom: 80px;
+            right: -400px;
+            background-color: var(--btn-bg);
+            color: var(--text-color);
+            border: var(--btn-border);
+            padding: 15px 25px;
+            border-radius: 12px;
+            box-shadow: var(--btn-shadow);
+            font-weight: bold;
+            font-size: 16px;
+            font-family: var(--font-family);
+            z-index: 2000;
+            transition: right 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        #toast-notification.show {
+            right: 20px;
+        }
     </style>
 </head>
 <body>
@@ -474,6 +517,8 @@
         <div class="theme-btn" id="theme-cyberpunk" onclick="setTheme('cyberpunk')">Cyberpunk</div>
     </div>
 
+    <div id="toast-notification"></div>
+
     <!--Zacatek buttons frontend-->
     <div id="input-page">
         <h1 id="input-page-title">Set Time</h1>
@@ -503,6 +548,7 @@
             <span id="t-checkbox-label">Zaškrtnout více možností</span>
         </label>
         
+        <!--Buttons-->
         <div class="btn-grid">
             <button class="action-btn" data-id="0"><span>0 - <span class="t-exit">Exit</span></span><span class="badge"></span></button>
             <button class="action-btn" data-id="1"><span>1 - <span class="t-time">Nastavit čas (Vypnutí/Hibernace)</span></span><span class="badge"></span></button>
@@ -539,6 +585,22 @@
     </footer>
 
     <script>
+        // 1. KONSTANTY PRO AKCE
+        const ACTIONS = {
+            TIME_SETTINGS: '1',
+            CANCEL_SHUTDOWN: '2',
+            RUN_UPDATES: '3',
+            RUN_UPDATES_ADMIN: '4',
+            LOCK_PC: '5',
+            ADD_DELAY: '6',
+            EXIT_APP: '0'
+        };
+
+        const SUB_ACTIONS = {
+            SHUTDOWN: '4',
+            HIBERNATE: '5'
+        };
+
         const translations = {
             cz: {
                 time: "Nastavení času (na vypnutí či hibernaci)",
@@ -563,7 +625,8 @@
                 logUpNew: "Spouštím update balíčků s administrátorskými právy.",
                 logLock: "Zamykám PC.",
                 logExit: "Odesílám signál pro ukončení aplikace.",
-                back: "Zpět"
+                back: "Zpět",
+                hibernateWarn: "Pro možnost hibernace je potřeba tuto možnost zapnout v Ovládacích panelech (Control Panels)."
             },
             en: {
                 time: "Set Time (Shutdown/Hibernate)",
@@ -588,19 +651,66 @@
                 logUpNew: "Running package updates with administrator privileges.",
                 logLock: "Locking PC.",
                 logExit: "Sending application exit signal.",
-                back: "Back"
+                back: "Back",
+                hibernateWarn: "To use hibernation, you need to enable it in the Control Panels."
             }
         };
 
         let currentLang = localStorage.getItem('pc_lang') || 'cz';
         let currentTheme = localStorage.getItem('pc_theme') || 'dark-neon';
-        let queue = []; 
-        let consoleHistory = []; 
+        let queue = [];
+        let consoleHistory = [];
+        let activeInputResolve = null;
+        let activeCountdowns = {}; 
 
+        // Kešování elementů
+        const consoleOutput = document.getElementById('console-output');
+        const inputPage = document.getElementById('input-page');
+        const inputPageTitle = document.getElementById('input-page-title');
+        const inputActionSelect = document.getElementById('input-action-select');
+        const inputPageSubmit = document.getElementById('input-page-submit');
+        const inputPageBack = document.getElementById('input-page-back');
+        const customNumberInput = document.getElementById('custom-number-input');
+        const actionButtons = document.querySelectorAll('.action-btn');
+        const settingsIcon = document.getElementById('settings-icon');
+        const settingsModal = document.getElementById('settings-modal');
+        const mainContainer = document.getElementById('main-container');
+        const multiSelectMode = document.getElementById('multi-select-mode');
+        const runBtn = document.getElementById('run-btn');
+
+        // Inicializace aplikace
         document.body.setAttribute('data-theme', currentTheme);
         window.addEventListener('DOMContentLoaded', () => {
             setLang(currentLang);
+            initModalEvents();
         });
+
+        function initModalEvents() {
+            inputPageSubmit.addEventListener('click', () => {
+                if (!activeInputResolve) return;
+                
+                const val = customNumberInput.value || "0";
+                let selectedOpt = null;
+                
+                const showOptions = inputActionSelect.style.display !== 'none';
+                if (showOptions) {
+                    const checkedRadio = document.querySelector('input[name="sub-action"]:checked');
+                    selectedOpt = checkedRadio ? checkedRadio.value : SUB_ACTIONS.SHUTDOWN;
+                }
+                
+                inputPage.classList.remove('active');
+                activeInputResolve({ val: val, opt: selectedOpt });
+                activeInputResolve = null;
+            });
+
+            inputPageBack.addEventListener('click', () => {
+                if (!activeInputResolve) return;
+                
+                inputPage.classList.remove('active');
+                activeInputResolve(null);
+                activeInputResolve = null;
+            });
+        }
 
         function setLang(lang) {
             currentLang = lang;
@@ -611,19 +721,22 @@
                 '.t-time': t.time, '.t-cancel': t.cancel, '.t-up-here': t.upHere,
                 '.t-up-new': t.upNew, '.t-lock': t.lock, '.t-delay': t.delay,
                 '.t-exit': t.exit, '#t-checkbox-label': t.checkbox, '#run-btn': t.runBtn,
-                '.t-shutdown-opt': t.shutdownOpt, '.t-hib-opt': t.hibOpt, '.t-back': t.back
+                '.t-shutdown-opt': t.shutdownOpt, '.t-hib-opt': t.hibOpt, '.t-back': t.back,
+                '#hibernate-warning': t.hibernateWarn
             };
 
             for (const [selector, text] of Object.entries(els)) {
                 const el = document.querySelector(selector) || document.getElementById(selector.replace('#', ''));
                 if (el) el.innerText = text;
             }
+
+            if (inputPage.classList.contains('active')) {
+                const showOptions = inputActionSelect.style.display !== 'none';
+                inputPageTitle.innerText = showOptions ? t.titleTime : t.titleDelay;
+            }
+
             renderConsole();
         }
-
-        const settingsIcon = document.getElementById('settings-icon');
-        const settingsModal = document.getElementById('settings-modal');
-        const mainContainer = document.getElementById('main-container');
 
         settingsIcon.addEventListener('click', () => {
             settingsModal.classList.toggle('active');
@@ -638,21 +751,17 @@
             mainContainer.classList.remove('blurred');
         }
 
-        const multiSelectMode = document.getElementById('multi-select-mode');
-        const runBtn = document.getElementById('run-btn');
-
         multiSelectMode.addEventListener('change', function() {
             queue = [];
             updateBadges();
             runBtn.style.display = this.checked ? 'block' : 'none';
         });
 
-        const customNumberInput = document.getElementById('custom-number-input');
         customNumberInput.addEventListener('keypress', function(e) {
             if (!/[0-9]/.test(e.key)) e.preventDefault();
         });
 
-        document.querySelectorAll('.action-btn').forEach(btn => {
+        actionButtons.forEach(btn => {
             btn.addEventListener('click', function() {
                 const id = this.getAttribute('data-id');
 
@@ -677,43 +786,22 @@
 
         function askForInput(title, showOptions) {
             return new Promise((resolve) => {
-                document.getElementById('input-page-title').innerText = title;
+                inputPageTitle.innerText = title;
                 customNumberInput.value = '';
-                document.getElementById('input-action-select').style.display = showOptions ? 'flex' : 'none';
-                document.getElementById('input-page').classList.add('active');
+                inputActionSelect.style.display = showOptions ? 'flex' : 'none';
+                inputPage.classList.add('active');
                 
-                const submitBtn = document.getElementById('input-page-submit');
-                const backBtn = document.getElementById('input-page-back');
-                
-                const newSubmitBtn = submitBtn.cloneNode(true);
-                submitBtn.parentNode.replaceChild(newSubmitBtn, submitBtn);
-                const newBackBtn = backBtn.cloneNode(true);
-                backBtn.parentNode.replaceChild(newBackBtn, backBtn);
-
-                newSubmitBtn.addEventListener('click', () => {
-                    const val = customNumberInput.value || "0";
-                    let selectedOpt = null;
-                    if (showOptions) {
-                        const checkedRadio = document.querySelector('input[name="sub-action"]:checked');
-                        selectedOpt = checkedRadio ? checkedRadio.value : '4';
-                    }
-                    document.getElementById('input-page').classList.remove('active');
-                    resolve({ val: val, opt: selectedOpt });
-                });
-
-                newBackBtn.addEventListener('click', () => {
-                    document.getElementById('input-page').classList.remove('active');
-                    resolve(null); 
-                });
+                if (activeInputResolve) activeInputResolve(null);
+                activeInputResolve = resolve;
             });
         }
 
         async function handleSingleAction(id) {
             const t = translations[currentLang];
-            if (id === '1') {
+            if (id === ACTIONS.TIME_SETTINGS) {
                 const res = await askForInput(t.titleTime, true);
                 if (res) logAction({ type: 'single', actionId: id, params: { cas: res.val, akce: res.opt } });
-            } else if (id === '6') {
+            } else if (id === ACTIONS.ADD_DELAY) {
                 const res = await askForInput(t.titleDelay, false);
                 if (res) logAction({ type: 'single', actionId: id, params: { delay: res.val } });
             } else {
@@ -732,7 +820,7 @@
         }
 
         function updateBadges() {
-            document.querySelectorAll('.action-btn').forEach(btn => {
+            actionButtons.forEach(btn => {
                 const id = btn.getAttribute('data-id');
                 const idx = queue.findIndex(item => item.id === id);
                 const badge = btn.querySelector('.badge');
@@ -755,12 +843,12 @@
 
             for (let i = 0; i < queue.length; i++) {
                 const item = queue[i];
-                if (item.id === '1') {
+                if (item.id === ACTIONS.TIME_SETTINGS) {
                     const res = await askForInput(t.titleTime, true);
                     if (!res) return; 
                     finalQueue.push({ id: item.id, params: { cas: res.val, akce: res.opt } });
                 } 
-                else if (item.id === '6') {
+                else if (item.id === ACTIONS.ADD_DELAY) {
                     const res = await askForInput(t.titleDelay, false);
                     if (!res) return; 
                     finalQueue.push({ id: item.id, params: { delay: res.val } });
@@ -777,7 +865,6 @@
             runBtn.style.display = 'none';
         });
 
-        // OPRAVA: Data posíláme do C# jako strukturovaný JSON
         function logAction(logObj) {
             consoleHistory.push(logObj);
             renderConsole();
@@ -794,9 +881,9 @@
             let label = "", code = "", admin = false;
             
             switch(id) {
-                case '1': 
+                case ACTIONS.TIME_SETTINGS: 
                     let sec = parseInt(params.cas) * 60;
-                    if (params.akce === '4') {
+                    if (params.akce === SUB_ACTIONS.SHUTDOWN) {
                         label = lang === 'cz' ? `Naplánováno vypnutí za ${params.cas} min.` : `Shutdown scheduled in ${params.cas} min.`;
                         code = `shutdown -s -t ${sec}`;
                     } else {
@@ -804,24 +891,24 @@
                         code = `C# Background Timer -> shutdown /h`;
                     }
                     break;
-                case '2': label = t.logCancel; code = "shutdown -a & C# Cancel"; break;
-                case '3': label = t.logUpHere; code = `winget upgrade --all ...`; break;
-                case '4': label = t.logUpNew; code = `winget upgrade --all (Admin)`; admin = true; break;
-                case '5': label = t.logLock; code = "LockWorkStation"; break;
-                case '6': 
+                case ACTIONS.CANCEL_SHUTDOWN: label = t.logCancel; code = "shutdown -a & C# Cancel"; break;
+                case ACTIONS.RUN_UPDATES: label = t.logUpHere; code = `winget upgrade --all ...`; break;
+                case ACTIONS.RUN_UPDATES_ADMIN: label = t.logUpNew; code = `winget upgrade --all (Admin)`; admin = true; break;
+                case ACTIONS.LOCK_PC: label = t.logLock; code = "LockWorkStation"; break;
+                case ACTIONS.ADD_DELAY: 
                     label = lang === 'cz' ? `Přidávám delay ${params.delay} min.` : `Adding delay ${params.delay} min.`;
                     code = `C# Async Wait (${params.delay}m)`; break;
-                case '0': label = t.logExit; code = "EXIT_APP"; break; 
+                case ACTIONS.EXIT_APP: label = t.logExit; code = "EXIT_APP"; break; 
             }
             return { label, code, admin };
         }
 
         function renderConsole() {
-            const outDiv = document.getElementById('console-output');
             const t = translations[currentLang];
             let fullText = "```\n";
-            
-            if (consoleHistory.length === 0) {
+
+            let countdownKeys = Object.keys(activeCountdowns);
+            if (consoleHistory.length === 0 && countdownKeys.length === 0) {
                 fullText += t.waiting + "\n";
             } else {
                 consoleHistory.forEach((log, index) => {
@@ -846,26 +933,61 @@
                         fullText += "\n> " + chainCode.trim().replace(/\n/g, "\n> ") + "\n";
                     }
                 });
+
+                if (countdownKeys.length > 0) {
+                    if (consoleHistory.length > 0) fullText += "\n";
+                    countdownKeys.forEach(k => {
+                        let c = activeCountdowns[k];
+                        let label = c.label;
+                        if (currentLang === 'en') {
+                            if (label === 'Vypnutí') label = 'Shutdown';
+                            else if (label === 'Hibernace') label = 'Hibernate';
+                        }
+                        fullText += `[i] ${label}: ${c.remaining}\n`;
+                    });
+                }
             }
+
             fullText += "```";
-            outDiv.innerText = fullText;
-            outDiv.scrollTop = outDiv.scrollHeight;
+            consoleOutput.innerText = fullText;
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
         }
 
-        // FUNKCE VOLANÁ PŘÍMO Z C# PRO KONTROLU HIBERNACE
+        // GLOBÁLNÍ EXPOZICE PRO WPF WEBVIEW2
+        window.updateConsoleCountdown = function(id, label, remainingText) {
+            if (!remainingText) {
+                delete activeCountdowns[id];
+            } else {
+                activeCountdowns[id] = { label: label, remaining: remainingText };
+            }
+            renderConsole();
+        }
+
+        window.showNotification = function(type) {
+            const toast = document.getElementById('toast-notification');
+            if(type === 'cancel') {
+                toast.innerText = currentLang === 'cz' ? 'Odpočet byl zrušen!' : 'Countdown was cancelled!';
+            } else {
+                toast.innerText = type;
+            }
+            toast.classList.add('show');
+            setTimeout(() => { toast.classList.remove('show'); }, 4000);
+        }
+
         function checkHibernate(isEnabled) {
-            let hibernateRadio = document.querySelector('input[name="sub-action"][value="5"]');
+            let hibernateRadio = document.querySelector(`input[name="sub-action"][value="${SUB_ACTIONS.HIBERNATE}"]`);
             let hibernateLabel = hibernateRadio ? hibernateRadio.closest('.radio-label') : null;
             let warningText = document.getElementById('hibernate-warning');
+            const t = translations[currentLang];
 
             if (!isEnabled) {
                 if (hibernateLabel) hibernateLabel.style.display = 'none'; 
                 if (warningText) {
                     warningText.style.display = 'block';
-                    warningText.innerText = "Jestliže chcete zvolit mode Hibernace, povolte Hibernaci v Ovládacích panelech.";
+                    warningText.innerText = t.hibernateWarn;
                 }
                 if (hibernateRadio && hibernateRadio.checked) {
-                    document.querySelector('input[name="sub-action"][value="4"]').checked = true;
+                    document.querySelector(`input[name="sub-action"][value="${SUB_ACTIONS.SHUTDOWN}"]`).checked = true;
                 }
             } else {
                 if (hibernateLabel) hibernateLabel.style.display = 'inline-flex';

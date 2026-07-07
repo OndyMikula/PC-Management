@@ -16,21 +16,25 @@ namespace PCManager_App
 {
     public partial class MainWindow : Window
     {
-        /*2.1
-        Přidáno upozornění na novou verzi!
-        Jakýkoliv odpočet se nyní pravidelně vypisuje do konzole (od oznámení do několika minut až po oznámení každou vteřinu)
+        /*2.2
+        Addition:
+        'Toast' notification if user chooses 2. action
+        Any countdown is now displayed in the console
+        Action 2 now cancles nearest countdown
+        Dialog pro aktualizaci má nyní vlastní interaktivní okno s volbou "Příště nezobrazovat".
 
-        Fixes:
-        Aplikace je oddělena od Webview2 procesu ve Správci úloh
-        Logo aplikace se zobrazuje v Průzkumníku souborů i na ploše
-        Delay v řetězci nečekal na dokončení akce a spouštěl další příkaz.
+        Fixed:
+        Hibernation was not correctly detecting in some cases, now it checks multiple registry keys to ensure accuracy.
+        If an error occurs during the execution of a chain of actions, it is now logged to the console instead of crashing the application.
         */
 
         private CancellationTokenSource? _chainCancellationTokenSource;
         private CancellationTokenSource? _hibernateCancellationTokenSource;
+        private CancellationTokenSource? _delayCancellationTokenSource;
+        private Process? _hibernateProcess;
 
         // Zde definuješ verzi před kompilací. Skript ji pak sám doplní do .footer-right v HTML.
-        private readonly string _currentVersion = "2.1";
+        private readonly string _currentVersion = "2.2";
 
         // Import nativní Windows funkce pro zamknutí obrazovky
         [DllImport("user32.dll")]
@@ -110,57 +114,54 @@ namespace PCManager_App
         {
             try
             {
-                string jsonMessage = e.TryGetWebMessageAsString();
+                string? jsonMessage = e.TryGetWebMessageAsString();
                 if (string.IsNullOrEmpty(jsonMessage)) return;
 
-                using (JsonDocument doc = JsonDocument.Parse(jsonMessage))
+                using JsonDocument doc = JsonDocument.Parse(jsonMessage);
+                JsonElement root = doc.RootElement;
+                string type = root.GetProperty("type").GetString() ?? "";
+
+                if (type == "single")
                 {
-                    JsonElement root = doc.RootElement;
-                    string type = root.GetProperty("type").GetString() ?? "";
+                    string actionId = root.GetProperty("actionId").GetString() ?? "";
+                    JsonElement parameters = root.TryGetProperty("params", out var p) ? p : default;
 
-                    if (type == "single")
+                    await ExecuteActionAsync(actionId, parameters);
+                }
+                else if (type == "chain")
+                {
+                    // Stopneme předchozí řetězec, pokud by běžel
+                    _chainCancellationTokenSource?.Cancel();
+                    _chainCancellationTokenSource = new CancellationTokenSource();
+                    var token = _chainCancellationTokenSource.Token;
+
+                    // Předáváme akce do Background Tasku a JSON data parsujeme znovu AŽ UVNITŘ
+                    _ = Task.Run(async () =>
                     {
-                        string actionId = root.GetProperty("actionId").GetString() ?? "";
-                        JsonElement parameters = root.TryGetProperty("params", out var p) ? p : default;
-
-                        await ExecuteActionAsync(actionId, parameters);
-                    }
-                    else if (type == "chain")
-                    {
-                        // Stopneme předchozí řetězec, pokud by běžel
-                        _chainCancellationTokenSource?.Cancel();
-                        _chainCancellationTokenSource = new CancellationTokenSource();
-                        var token = _chainCancellationTokenSource.Token;
-
-                        // Předáváme akce do Background Tasku a JSON data parsujeme znovu AŽ UVNITŘ,
-                        // čímž zabráníme tomu, aby je nadřazený 'using' blok předčasně smazal z paměti!
-                        _ = Task.Run(async () =>
+                        try
                         {
-                            try
+                            using JsonDocument innerDoc = JsonDocument.Parse(jsonMessage);
+                            JsonElement innerRoot = innerDoc.RootElement;
+                            JsonElement items = innerRoot.GetProperty("items");
+
+                            foreach (JsonElement item in items.EnumerateArray())
                             {
-                                using (JsonDocument innerDoc = JsonDocument.Parse(jsonMessage))
-                                {
-                                    JsonElement innerRoot = innerDoc.RootElement;
-                                    JsonElement items = innerRoot.GetProperty("items");
+                                if (token.IsCancellationRequested) break;
 
-                                    foreach (JsonElement item in items.EnumerateArray())
-                                    {
-                                        if (token.IsCancellationRequested) break;
+                                string id = item.GetProperty("id").GetString() ?? "";
+                                JsonElement itemParams = item.TryGetProperty("params", out var ip) ? ip : default;
 
-                                        string id = item.GetProperty("id").GetString() ?? "";
-                                        JsonElement itemParams = item.TryGetProperty("params", out var ip) ? ip : default;
-
-                                        // Spustí akci a POČKÁ na její dokončení (řeší bug s Delayem)
-                                        await ExecuteActionAsync(id, itemParams, token);
-                                    }
-                                }
+                                // Spustí akci a POČKÁ na její dokončení (řeší bug s Delayem)
+                                await ExecuteActionAsync(id, itemParams, token);
                             }
-                            catch (Exception ex)
-                            {
-                                Debug.WriteLine($"Chain Execution Error: {ex.Message}");
-                            }
-                        }, token);
-                    }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine($"\n[ERROR] Chain Execution Error:\n{ex}");
+                            Console.ResetColor();
+                        }
+                    }, token);
                 }
             }
             catch (Exception ex)
@@ -181,7 +182,9 @@ namespace PCManager_App
                     if (parameters.ValueKind == JsonValueKind.Number) seconds = parameters.GetInt32();
                     else if (parameters.TryGetProperty("seconds", out var p)) seconds = p.GetInt32();
 
-                    await ExecuteCountdownAsync(seconds, token);
+                    _delayCancellationTokenSource = new CancellationTokenSource();
+                    using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, _delayCancellationTokenSource.Token);
+                    await ExecuteCountdownAsync(seconds, "Delay", "delay_" + Guid.NewGuid().ToString("N"), linkedCts.Token);
                     return;
                 }
                 switch (id) //Samotná funkcionalita buttonů
@@ -196,23 +199,43 @@ namespace PCManager_App
                             int minutes = int.Parse(parameters.GetProperty("cas").GetString() ?? "0");
                             string subAction = parameters.GetProperty("akce").GetString() ?? "4";
 
+                            _hibernateCancellationTokenSource?.Cancel();
+                            _hibernateCancellationTokenSource = new CancellationTokenSource();
+
                             if (subAction == "4")
                             {
-                                RunSystemCommand("shutdown", $"-s -f -t {minutes * 60}");
-                            }
-                            else if (subAction == "5")
-                            {
-                                _hibernateCancellationTokenSource?.Cancel();
-                                _hibernateCancellationTokenSource = new CancellationTokenSource();
+                                int totalSeconds = minutes * 60;
+                                RunSystemCommand("shutdown", $"-s -f -t {totalSeconds}");
 
                                 _ = Task.Run(async () =>
                                 {
                                     try
                                     {
-                                        await Task.Delay(TimeSpan.FromMinutes(minutes), _hibernateCancellationTokenSource.Token);
-                                        RunSystemCommand("shutdown", "-h");
+                                        await ExecuteCountdownAsync(totalSeconds, "Vypnutí", "shutdown", _hibernateCancellationTokenSource.Token);
                                     }
-                                    catch (TaskCanceledException) { }
+                                    catch (Exception) { }
+                                });
+                            }
+                            else if (subAction == "5")
+                            {
+                                try { _hibernateProcess?.Kill(true); } catch { }
+                                var psi = new ProcessStartInfo
+                                {
+                                    FileName = "cmd.exe",
+                                    Arguments = $"/c timeout /t {minutes * 60} /nobreak >nul & shutdown -h",
+                                    CreateNoWindow = true,
+                                    WindowStyle = ProcessWindowStyle.Hidden,
+                                    UseShellExecute = false
+                                };
+                                _hibernateProcess = Process.Start(psi);
+
+                                _ = Task.Run(async () =>
+                                {
+                                    try
+                                    {
+                                        await ExecuteCountdownAsync(minutes * 60, "Hibernace", "hibernate", _hibernateCancellationTokenSource.Token);
+                                    }
+                                    catch (Exception) { }
                                 });
                             }
                         }
@@ -221,7 +244,14 @@ namespace PCManager_App
                     case "2": // Zrušení
                         RunSystemCommand("shutdown", "-a");
                         _hibernateCancellationTokenSource?.Cancel(); // Storno odložené hibernace
-                        _chainCancellationTokenSource?.Cancel();     // Storno běžícího delay/řetězce
+                        try { _hibernateProcess?.Kill(true); } catch { } // Storno neviditelného CMD procesu
+                        _delayCancellationTokenSource?.Cancel();     // Storno běžícího delaye (řetězec pokračuje)
+                        if (webView?.CoreWebView2 != null)
+                        {
+                            _ = Application.Current.Dispatcher.InvokeAsync(async () => {
+                                await webView.CoreWebView2.ExecuteScriptAsync("if(window.showNotification) window.showNotification('cancel');");
+                            });
+                        }
                         break;
 
                     case "3": // Winget normální
@@ -240,7 +270,9 @@ namespace PCManager_App
                         if (parameters.ValueKind != JsonValueKind.Undefined && parameters.ValueKind != JsonValueKind.Null)
                         {
                             int delayMinutes = int.Parse(parameters.GetProperty("delay").GetString() ?? "0");
-                            await Task.Delay(TimeSpan.FromMinutes(delayMinutes), token);
+                            _delayCancellationTokenSource = new CancellationTokenSource();
+                            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, _delayCancellationTokenSource.Token);
+                            await ExecuteCountdownAsync(delayMinutes * 60, "Delay", "chain_delay_" + Guid.NewGuid().ToString("N"), linkedCts.Token);
                         }
                         break;
                 }
@@ -280,7 +312,10 @@ namespace PCManager_App
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Failed to start process: {ex.Message}");
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"\n[ERROR] Failed to start process {fileName}:");
+                Console.WriteLine(ex.ToString());
+                Console.ResetColor();
             }
         }
 
@@ -288,62 +323,43 @@ namespace PCManager_App
         {
             try
             {
-                object? value = Registry.GetValue(@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Power", "HibernateEnabled", 0);
-                return value != null && (int)value == 1;
+                int powerRes = Convert.ToInt32(Registry.GetValue(@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Power", "HibernateEnabled", 0) ?? 0);
+                int uiRes = Convert.ToInt32(Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FlyoutMenuSettings", "ShowHibernateOption", 0) ?? 0);
+                int defaultRes = Convert.ToInt32(Registry.GetValue(@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Power", "HibernateEnabledDefault", 0) ?? 0);
+
+                return powerRes == 1 || uiRes == 1 || defaultRes == 1;
             }
             catch { return false; }
         }
 
         //Odpočet do konzole
-        private async Task ExecuteCountdownAsync(int totalSeconds, CancellationToken token)
+        private async Task ExecuteCountdownAsync(int totalSeconds, string label, string id, CancellationToken token)
         {
-            int lastLoggedRemaining = -1;
-
             for (int remaining = totalSeconds; remaining >= 0; remaining--)
             {
-                if (token.IsCancellationRequested) break;
-
-                bool shouldLog = false;
-
-                // 1. Vždy zalogovat úplný začátek a úplný konec
-                if (remaining == totalSeconds || remaining == 0)
+                if (token.IsCancellationRequested)
                 {
-                    shouldLog = true;
-                }
-                // 2. Pod 30 sekundami -> každou vteřinu
-                else if (remaining < 15)
-                {
-                    shouldLog = true;
-                }
-                // 3. Pod 2 minutami (120s) -> každých 30 sekund
-                else if (remaining < 120)
-                {
-                    if (remaining % 30 == 0) shouldLog = true;
-                }
-                // 4. Pod 10 minutami (600s) -> každých 5 minut (300s)
-                else if (remaining < 600)
-                {
-                    if (remaining % 300 == 0) shouldLog = true;
-                }
-                // 5. Pod 30 minutami (1800s) i nad 30 minut -> každých 10 minut (600s)
-                else
-                {
-                    if (remaining % 600 == 0) shouldLog = true;
+                    break;
                 }
 
-                // Pokud máme logovat a ještě jsme tento konkrétní čas nelogovali
-                if (shouldLog && remaining != lastLoggedRemaining)
+                TimeSpan t = TimeSpan.FromSeconds(remaining);
+                string timeFormatted = t.TotalHours >= 1
+                    ? $"{((int)t.TotalHours)}h {t.Minutes}m {t.Seconds}s"
+                    : $"{t.Minutes}m {t.Seconds}s";
+
+                Console.WriteLine($"[{label}] Zbývá: {timeFormatted}");
+
+                string jsCode = $"if(window.updateConsoleCountdown) window.updateConsoleCountdown({System.Text.Json.JsonSerializer.Serialize(id)}, {System.Text.Json.JsonSerializer.Serialize(label)}, {System.Text.Json.JsonSerializer.Serialize(timeFormatted)});";
+
+                Application.Current.Dispatcher.Invoke(() =>
                 {
-                    TimeSpan t = TimeSpan.FromSeconds(remaining);
-                    string timeFormatted = t.TotalHours >= 1
-                        ? $"{((int)t.TotalHours)}h {t.Minutes}m {t.Seconds}s"
-                        : $"{t.Minutes}m {t.Seconds}s";
+                    if (webView?.CoreWebView2 != null)
+                    {
+                        try { _ = webView.CoreWebView2.ExecuteScriptAsync(jsCode); } 
+                        catch { }
+                    }
+                });
 
-                    Console.WriteLine($"[Odpočet] Do konce akce zbývá: {timeFormatted}");
-                    lastLoggedRemaining = remaining;
-                }
-
-                // Počkej 1 sekundu do dalšího vyhodnocení
                 if (remaining > 0)
                 {
                     try
@@ -352,11 +368,20 @@ namespace PCManager_App
                     }
                     catch (TaskCanceledException)
                     {
-                        Console.WriteLine("[Odpočet] Odpočet byl přerušen uživatelem.");
+                        Console.WriteLine($"[{label}] Přerušeno uživatelem.");
                         break;
                     }
                 }
             }
+
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                if (webView?.CoreWebView2 != null)
+                {
+                    try { _ = webView.CoreWebView2.ExecuteScriptAsync($"if(window.updateConsoleCountdown) window.updateConsoleCountdown({System.Text.Json.JsonSerializer.Serialize(id)}, '', '');"); }
+                    catch { }
+                }
+            });
         }
         #endregion
 
@@ -378,7 +403,9 @@ namespace PCManager_App
                 {
                     string latestVersion = tagElement.GetString()?.Replace("v", "").Trim() ?? "";
 
-                    if (new Version(latestVersion) > new Version(_currentVersion) && latestVersion != skippedVersion)
+                    if (Version.TryParse(latestVersion, out Version? parsedLatest) && 
+                        Version.TryParse(_currentVersion, out Version? parsedCurrent) && 
+                        parsedLatest > parsedCurrent && latestVersion != skippedVersion)
                     {
                         var dialogResult = UpdateDialog.Show(this, latestVersion);
 
